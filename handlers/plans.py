@@ -645,7 +645,7 @@ async def finalize_custom_online_payment(bot, payment: dict) -> int | None:
             f"🆔 {payment['telegram_id']}\n"
             f"📦 حجم: {volume} گیگ\n⏳ مدت: {days} روز\n"
             + (f"🔤 نام: {custom_name}\n" if custom_name else "")
-            + f"💰 {payment['price']:,} تومان\n🔢 شماره سف��رش: {order_id}",
+            + f"💰 {payment['price']:,} تومان\n🔢 شماره سفارش: {order_id}",
         )
     else:
         await bot.send_message(
@@ -668,7 +668,7 @@ async def pay_with_online(callback: types.CallbackQuery, state: FSMContext):
 
     plan_key = callback.data.replace("pay_online_", "")
     if is_duplicate_action(f"onlinebuy_{callback.from_user.id}_{plan_key}"):
-        await callback.answer("���️ این درخواست در حال پردازش/ثبت‌شده است.", show_alert=True)
+        await callback.answer("⚠️ این درخواست در حال پردازش/ثبت‌شده است.", show_alert=True)
         return
 
     plan = db.get_effective_plan(plan_key)
@@ -971,7 +971,7 @@ async def my_configs_vip(callback: types.CallbackQuery):
     if not configs:
         await show_menu_with_sticker(callback.bot, callback.message.chat.id, "my_configs_list_empty", 
             "🚀 شما هنوز هیچ سرویس VIPی خریداری نکرده‌اید.",
-            reply_markup=back_button("my_configs", "🔙 ��ازگشت"),
+            reply_markup=back_button("my_configs", "🔙 بازگشت"),
         )
     else:
         await show_menu_with_sticker(callback.bot, callback.message.chat.id, "my_configs_list_has", 
@@ -1256,7 +1256,7 @@ async def mirror_configs(callback: types.CallbackQuery):
     await callback.answer("⏳ در حال دریافت کانفیگ‌ها از روی لینک ساب...")
 
     # -----------------------------------------------------------------
-    # نکته‌ی مهم: قبلاً اگر ی�� خطای غیرمنتظره (مثلاً پیام خیلی طولانی برای
+    # نکته‌ی مهم: قبلاً اگر یک خطای غیرمنتظره (مثلاً پیام خیلی طولانی برای
     # تلگرام یا کاراکتر خاصی که پارس مارک‌داون را خراب می‌کرد) در این بخش رخ
     # می‌داد، چون callback.answer بالا از قبل صدا زده شده بود، هندلر سراسری
     # خطا (bot.py) نمی‌توانست دوباره callback را answer کند و کاربر هیچ
@@ -1560,7 +1560,7 @@ async def _show_custom_summary(bot, chat_id: int, user_id, state: FSMContext):
 
 
 # ✅ دکمه‌ی «انتخاب روش پرداخت دیگر» روی صفحه‌ی پرداخت کارت‌به‌کارت سرویس سفارشی:
-# فاکتور ف��لی را منقضی می‌کند و دوباره صفحه‌ی خلاصه و انتخاب روش پرداخت را نمایش می‌دهد.
+# فاکتور فعلی را منقضی می‌کند و دوباره صفحه‌ی خلاصه و انتخاب روش پرداخت را نمایش می‌دهد.
 @router.callback_query(F.data == "cbuild_change_payment")
 async def cbuild_change_payment(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
