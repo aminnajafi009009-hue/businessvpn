@@ -635,7 +635,7 @@ def init_db():
 
     # ---------------------------------------------------------------------------
     # 🦖 لاگ خطاها (همان رویدادهایی که به Sentry هم ارسال می‌شود) — برای اینکه
-    # ادمین بدون نیاز به تنظیمات/دسترسی Sentry هم بتونه از داخل ایخود پنل ادمین
+    # ادمین بدون نیاز به تنظیمات/دسترسی Sentry هم بتونه از داخل ایخود پنل ا��مین
     # رب��ت آخرین خطاها رو ببیند.
     # ---------------------------------------------------------------------------
     cur.execute("""
@@ -1336,7 +1336,7 @@ INVOICE_EXPIRY_MINUTES = 30
 def online_payment_expires_at(created_at: str, minutes: int = INVOICE_EXPIRY_MINUTES) -> str:
     """زمان واقعی انقضای یک پرداخت آنلاین را از روی زمان ساخت (created_at) محاسبه می‌کند.
     جدول online_payments فقط created_at را دارد (نه expires_at)، پس این تابع همان
-    مقداری که توسط expire_due_online_payments برای حذف واقعی استفاده می‌شود را برمی‌گرداند
+    مقداری که توسط expire_due_online_payments برای حذف واقعی استفاده می‌شود را برمی‌��رداند
     تا به مینی‌اپ (برای شمارش‌معکوس واقعی) برگردانده شود، نه created_at."""
     from datetime import timedelta
     dt = datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S")
@@ -2761,6 +2761,24 @@ def get_panel_plan_map_with_panel(scope: str, scope_id: int) -> dict | None:
 def delete_panel_plan_map(scope: str, scope_id: int):
     with transaction() as cur:
         cur.execute("DELETE FROM panel_plan_map WHERE scope = ? AND scope_id = ?", (scope, scope_id))
+
+
+# fix: وقتی ادمین یک نگاشت پیش‌فرض برای کل یک دسته‌بندی VIP تنظیم می‌کند
+# (scope='vip_category')، باید نگاشت‌های اختصاصیِ قدیمی‌ترِ تک‌تک پلن‌های همان
+# دسته (scope='vip_plan') هم پاک شوند. چون در get_panel_map_for_plan_key نگاشت
+# اختصاصی پلن همیشه اولویت دارد، بدون این پاک‌سازی، تنظیم پیش‌فرض جدید دسته هیچ
+# اثری روی پلن‌هایی که از قبل نگاشت اختصاصی داشتند نمی‌گذاشت (مثلاً هنوز از
+# پنل شاهراه‌ی قدیمی استفاده می‌شد با اینکه پیش‌فرض دسته به پاسارگارد تغییر کرده بود).
+def clear_panel_plan_overrides_for_category(category_id: int):
+    plan_ids = [p["id"] for p in get_vip_plans(category_id)]
+    if not plan_ids:
+        return
+    placeholders = ",".join("?" for _ in plan_ids)
+    with transaction() as cur:
+        cur.execute(
+            f"DELETE FROM panel_plan_map WHERE scope = 'vip_plan' AND scope_id IN ({placeholders})",
+            plan_ids,
+        )
 
 
 def list_panel_plan_maps(scope: str | None = None) -> list[dict]:
