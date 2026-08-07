@@ -26,6 +26,7 @@ import html
 import json
 import logging
 from datetime import datetime, timedelta
+from subscription import format_service_package
 from io import BytesIO
 
 from aiogram import Router, F, types
@@ -162,6 +163,15 @@ async def auto_fulfill_custom_via_panel(bot, user: dict, order_id: int, volume, 
     """معادل تابع بالا، ولی برای سفارش‌های «بساز سرویس خودت». چون این سفارش‌ها
     دسته‌بندی ثابت ندارند (حجم/مدت دلخواه مشتری‌ست)، یک نگاشت پیش‌فرض واحد
     (scope='custom_build') استفاده می‌شود که به یک نمونه‌ی پنل خاص (از هر سه نوع) اشاره می‌کند."""
+    order = db.get_custom_order(order_id)
+    if order and order.get("order_type") == "renew" and order.get("target_config_id"):
+        ok, msg = await _fulfill_custom_renew(bot, order, order_id, volume, days)
+        try:
+            await bot.send_message(ADMIN_ID, msg)
+        except Exception:
+            pass
+        return ok
+
     mapping = db.get_panel_plan_map_with_panel("custom_build", 0)
     if not mapping or not mapping.get("enabled"):
         return False
@@ -885,6 +895,50 @@ async def panel_manual_link_received(message: types.Message, state: FSMContext):
     await state.clear()
 
 
+async def _fulfill_custom_renew(bot, order: dict, order_id: int, volume, days) -> tuple[bool, str]:
+    """برای سفارش‌های تمدید (order_type == "renew")، به‌جای ساخت یک سرویس جدید، همون
+    سرویس موجود را واقعاً از داخل پنل تمدید می‌کند (همان لینک ساب قبلی حفظ می‌شود).
+    خروجی: (True, متن موفقیت) یا (False, پیام خطا)."""
+    target_config_id = order.get("target_config_id")
+    cfg = db.get_config_by_id(target_config_id) if target_config_id else None
+    if not cfg:
+        return False, "❌ سرویس مقصد برای تمدید یافت نشد (ممکن است حذف شده باشد)."
+    if not cfg.get("panel_id") or not cfg.get("service_id"):
+        return False, "❌ این سرویس از داخل پنل ساخته نشده و قابل تمدید خودکار نیست."
+    panel = db.get_vpn_panel(cfg["panel_id"])
+    if not panel or not panel.get("enabled"):
+        return False, "❌ پنل مربوطه به این سرویس یافت نشد یا غیرفعال است."
+
+    ok, new_link, new_service_id, raw_data, msg = await panels.renew_service(panel, cfg["service_id"], remote_ref=None, volume_gb=volume, days=days)
+    if not ok:
+        return False, f"❌ تمدید از داخل پنل ناموفق بود: {msg}"
+
+    expiry_date = (now_tehran_naive() + timedelta(days=days)).strftime("%Y-%m-%d") if days else cfg.get("expiry")
+    volume_text, days_text = format_service_package(volume, days, None)
+    plan_name = f"{cfg['plan'].split(' | ')[0] if ' | ' in cfg['plan'] else cfg['plan']} | {volume_text} | {days_text}"
+    updated_encrypted = crypto.encrypt_config(new_link) if new_link else cfg["config"]
+    db.update_config(target_config_id, plan_name, updated_encrypted, expiry=expiry_date, service_id=(new_service_id or cfg["service_id"]), panel_id=cfg["panel_id"])
+
+    user = db.get_user_by_id(cfg["user_id"])
+    if user:
+        try:
+            decrypted_link = crypto.decrypt_config(updated_encrypted)
+        except Exception:
+            decrypted_link = None
+        text = (
+            "✅ سرویس شما همین سرویس قبلی از داخل پنل تمدید شد (لینک ساب شما تغییر نکرده)\n\n"
+            f"🗜 حجم جدید: {volume_text}\n"
+            f"⏳ مدت جدید: {days_text}\n"
+        )
+        try:
+            await bot.send_message(int(user["telegram_id"]), text)
+        except Exception:
+            logger.exception("ارسال پیام تمدید واقعی به کاربر ناموفق بود")
+
+    db.set_custom_order_status(order_id, "fulfilled")
+    return True, "✅ سرویس همان سرویس قبلی به‌طور واقعی از داخل پنل تمدید شد (بدون ساخت سرویس جدید)."
+
+
 async def _deliver_panel_link(bot, ctx: dict, link: str):
     """سرویس ساخته‌شده از هر یک از سه نوع پنل را در دیتابیس ذخیره و برای کاربر ارسال می‌کند
     (دقیقاً همان قالب/تجربه‌ی ارسال دستی، فقط بدون نیاز به آپلود دستی عکس/لینک)."""
@@ -905,8 +959,7 @@ async def _deliver_panel_link(bot, ctx: dict, link: str):
     name = snap.get("name") or "کاربر"
     volume_gb = snap.get("volume_gb")
     days = snap.get("days")
-    volume_text = f"{volume_gb} گیگابایت" if volume_gb else "طبق بسته‌ی انتخابی"
-    days_text = f"{days} روز" if days else "نامحدود"
+    volume_text, days_text = format_service_package(volume_gb, days, plan_key)
     expiry_date = (now_tehran_naive() + timedelta(days=days)).strftime("%Y-%m-%d") if days else None
 
     caption = (
@@ -1061,6 +1114,8 @@ async def panel_disable(callback: types.CallbackQuery):
         await callback.answer("❌ نمونه پنل مربوط پیدا نشد.", show_alert=True)
         return
     ok, msg = await panels.disable_service(panel, cfg["service_id"])
+    if ok:
+        db.set_config_link_disabled(cfg_id, True)
     await callback.answer(f"✅ در {panels.panel_label(panel)} غیرفعال شد." if ok else f"❌ {msg}", show_alert=True)
 
 
@@ -1078,4 +1133,6 @@ async def panel_enable(callback: types.CallbackQuery):
         await callback.answer("❌ نمونه پنل مربوط پیدا نشد.", show_alert=True)
         return
     ok, msg = await panels.enable_service(panel, cfg["service_id"])
+    if ok:
+        db.set_config_link_disabled(cfg_id, False)
     await callback.answer(f"✅ در {panels.panel_label(panel)} فعال شد." if ok else f"❌ {msg}", show_alert=True)
