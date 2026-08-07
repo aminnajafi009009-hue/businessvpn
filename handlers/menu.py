@@ -31,6 +31,7 @@ from keyboards import (
     admin_discount_menu,
     admin_userlist_menu,
     purchase_payment_keyboard,
+    free_test_confirm_keyboard,
     main_reply_keyboard,
     admin_reply_keyboard,
     admin_referrers_page_keyboard,
@@ -79,14 +80,18 @@ async def menu_free_test(message: types.Message, state: FSMContext):
         return
 
     await state.clear()
+    # fix: تست رایگان قیمتش صفر است، پس هیچ روش پرداختی نشان داده نمی‌شود؛
+    # فقط یک متن تشویقی + یک دکمه‌ی سبز ارسال خودکار از پنل فعال (مطابق handlers/plans.py).
     text = (
-        f"🎁 {plan['name']}\n💰 قیمت: {plan['price']:,} تومان\n"
-        f"👛 موجودی کیف پول شما: {user['wallet']:,} تومان\n\nروش پرداخت را انتخاب کنید:"
+        f"🎁 {plan['name']}\n\n"
+        "🛡 پیش از پرداخت، فقط حرف ما رو باور نکن — خودت امتحانش کن!\n\n"
+        "۱۰۰٪ رایگان و بدون نیاز به هیچ پرداختی — همین الان سرعت و پایداری واقعی سرویس رو با چشم خودت ببین.\n\n"
+        "⚡️ روی دکمه‌ی سبز زیر بزن؛ کانفیگ تستت همین الان و کاملاً خودکار از پنل فعال ساخته و برات ارسال می‌شود. ✅"
     )
     # 🧪 تست: استیکر test.webm درست بالای منوی تست رایگان
     await show_menu_with_sticker(
         message.bot, message.chat.id, "free_test",
-        text, reply_markup=purchase_payment_keyboard(FREE_TEST_PLAN_KEY, show_discount=True),
+        text, reply_markup=free_test_confirm_keyboard(FREE_TEST_PLAN_KEY),
     )
 
 
@@ -295,7 +300,7 @@ async def menu_admin_stats(message: types.Message, state: FSMContext):
     await state.clear()
     text = (
         f"📊 آمار ربات\n\n"
-        f"💰 فروش ام��و��: {db.sales_since(1):,} تومان\n"
+        f"💰 فروش امروز: {db.sales_since(1):,} تومان\n"
         f"💰 فروش هفته: {db.sales_since(7):,} تومان\n"
         f"💰 فروش ماه: {db.sales_since(30):,} تومان\n"
         f"💰 کل فروش: {db.total_sales():,} تومان\n\n"
@@ -324,7 +329,7 @@ async def menu_admin_broadcast(message: types.Message, state: FSMContext):
     if not _is_admin(message.from_user.id):
         return
     await message.answer(
-        "📢 پیامی که می‌خواهید برای همه ک��ر��ران ارسال شود را بنویسید:",
+        "📢 پیامی که می‌خواهید برای همه کاربران ارسال شود را بنویسید:",
         reply_markup=admin_back_button(),
     )
     await state.set_state(UserStates.waiting_broadcast)
