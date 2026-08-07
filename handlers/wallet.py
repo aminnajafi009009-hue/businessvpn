@@ -209,7 +209,9 @@ async def charge_pay_with_card(callback: types.CallbackQuery, state: FSMContext)
         f"💳 شماره کارت:\n{bot_info.get('card_number')}\n\n"
         f"👤 {bot_info.get('card_holder')}\n\n"
         f"📸 عکس رسید را ارسال کنید.\n\n"
-        f"⏱ این شماره کارت و مبلغ تا ساعت {deadline_str} (۳۰ دقیقه) معتبر است. لطفاً تا این ساعت رسید پرداخت را ارسال کنید، وگرنه این فاکتور به‌طور خودکار منقضی و حذف می‌شود.",
+        f"⏱ این شماره کارت و مبلغ تا ساعت {deadline_str} (۳۰ دقیقه) معتبر است. لطفاً تا این ساعت رسید پرداخت را ارسال کنید، وگرنه این فاکتور به‌طور خودکار منقضی و حذف می‌شود.\n\n"
+        f"*⚠️ دقیقاً همین مبلغ ({amount:,} تومان) را واریز کنید تا پرداختتان شناسایی و بلافاصله تایید شود.*",
+        parse_mode="Markdown",
         reply_markup=card_payment_actions_keyboard(bot_info.get('card_number'), amount, f"changepay_wallet_{amount}"),
     )
     await callback.answer()
