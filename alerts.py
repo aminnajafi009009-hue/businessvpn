@@ -58,11 +58,17 @@ async def _check_single_config(bot, cfg):
             db.set_config_alert_sent(cfg["id"], "alert_80_sent")
 
     expire_ts = usage.get("expire")
-    if expire_ts:
-        remaining = days_remaining(expire_ts)
-        if remaining is not None and 0 <= remaining <= 2 and not cfg.get("alert_expiry_sent"):
+    remaining = days_remaining(expire_ts) if expire_ts else None
+    if remaining is not None:
+        if 0 <= remaining <= 2 and not cfg.get("alert_expiry_sent"):
             await _send_expiry_alert(bot, user, cfg, remaining)
             db.set_config_alert_sent(cfg["id"], "alert_expiry_sent")
+
+    ended_by_time = remaining is not None and remaining < 0
+    ended_by_volume = bool(total) and used >= total
+    if (ended_by_time or ended_by_volume) and not cfg.get("alert_ended_sent"):
+        await _send_ended_alert(bot, user, cfg, ended_by_volume)
+        db.set_config_alert_sent(cfg["id"], "alert_ended_sent")
 
 
 async def _send_usage_alert(bot, user, cfg, percent):
@@ -87,6 +93,27 @@ async def _send_expiry_alert(bot, user, cfg, remaining):
         "برای جلوگیری از قطعی، همین الان تمدید کنید 🔁"
     )
     await _safe_send(bot, user, cfg, text, sticker_key="notif_expiry")
+
+
+async def _send_ended_alert(bot, user, cfg, ended_by_volume: bool):
+    reason = "حجم سرویستون" if ended_by_volume else "زمان سرویستون"
+    text = (
+        "⛔️ سرویس شما به پایان رسید\n\n"
+        f"📦 {cfg['plan']}\n\n"
+        f"🔴 {reason} شما به پایان رسیده و سرویس منقضی شده است.\n\n"
+        "برای ادامه‌ی استفاده، همین الان از بخش خرید اشتراک، سرویس خودتون رو تمدید کن 🔁"
+    )
+    try:
+        await send_notification_sticker(bot, int(user["telegram_id"]), "notif_ended")
+    except Exception:
+        pass
+    try:
+        await bot.send_message(
+            int(user["telegram_id"]), text,
+            reply_markup=back_button("plans", "🛍 خرید اشتراک"),
+        )
+    except Exception:
+        logger.exception("ارسال هشدار پایان سرویس ناموفق بود")
 
 
 async def _safe_send(bot, user, cfg, text, sticker_key: str | None = None):
