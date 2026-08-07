@@ -1777,6 +1777,7 @@ async def admin_service_edit_link_apply(message: types.Message, state: FSMContex
         return
 
     db.update_config_link(cfg_id, crypto.encrypt_config(new_link))
+    db.set_config_link_disabled(cfg_id, False)
     await message.answer("✅ لینک ساب سرویس بروزرسانی شد.", reply_markup=admin_back_button())
     await state.clear()
 
