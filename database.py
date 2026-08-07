@@ -171,6 +171,8 @@ def init_db():
             alert_80_sent     INTEGER NOT NULL DEFAULT 0,
             alert_90_sent     INTEGER NOT NULL DEFAULT 0,
             alert_expiry_sent INTEGER NOT NULL DEFAULT 0,
+            alert_ended_sent  INTEGER NOT NULL DEFAULT 0,
+            sub_link_disabled INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     """)
@@ -185,6 +187,7 @@ def init_db():
         "ALTER TABLE configs ADD COLUMN alert_80_sent INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE configs ADD COLUMN alert_90_sent INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE configs ADD COLUMN alert_expiry_sent INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE configs ADD COLUMN alert_ended_sent INTEGER NOT NULL DEFAULT 0",
         # منشأ سرویس: 'manual' (ادمین دستی فرستاده) یا نام یک نوع پنل ('shahrah'/
         # 'marzban'/'pasargad') اگر به‌صورت خودکار از یک پنل ساخته شده باشد.
         # service_id در آن حالت همان slug/username سرویس در همان پنل است (برای
@@ -196,6 +199,7 @@ def init_db():
         # نمونه‌ی دقیقی برود که سرویس رویش ساخته شده، نه هر نمونه‌ای که فعلاً
         # برای آن پلن نگاشت شده (که ممکن است بعداً توسط ادمین عوض شده باشد).
         "ALTER TABLE configs ADD COLUMN panel_id INTEGER",
+        "ALTER TABLE configs ADD COLUMN sub_link_disabled INTEGER NOT NULL DEFAULT 0",
     ):
         try:
             cur.execute(ddl)
@@ -1023,6 +1027,11 @@ def set_config_deleted(config_id: int, deleted: bool):
         cur.execute("UPDATE configs SET deleted = ? WHERE id = ?", (1 if deleted else 0, config_id))
 
 
+def set_config_link_disabled(config_id: int, disabled: bool):
+    with transaction() as cur:
+        cur.execute("UPDATE configs SET sub_link_disabled = ? WHERE id = ?", (1 if disabled else 0, config_id))
+
+
 def archive_expired_configs() -> int:
     """کانفیگ‌های منقضی‌شده (expiry < today) را به‌صورت خودکار آرشیو می‌کند (deleted=1).
     تعداد کانفیگ‌های آرشیو‌شده را برمی‌گرداند. (تاریخ امروز بر اساس ساعت تهران محاسبه می‌شود.)"""
@@ -1045,7 +1054,7 @@ def delete_config_permanently(config_id: int):
 
 
 def set_config_alert_sent(config_id: int, field: str):
-    if field not in ("alert_80_sent", "alert_90_sent", "alert_expiry_sent"):
+    if field not in ("alert_80_sent", "alert_90_sent", "alert_expiry_sent", "alert_ended_sent"):
         return
     with transaction() as cur:
         cur.execute(f"UPDATE configs SET {field} = 1 WHERE id = ?", (config_id,))
