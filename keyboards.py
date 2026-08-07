@@ -357,7 +357,7 @@ def free_test_confirm_keyboard(plan_key: str):
     و ارسال می‌شود (auto_fulfill_vip_via_panel).
     """
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ دریافت تست رایگان", callback_data=f"pay_wallet_{plan_key}", style="success")],
+        [InlineKeyboardButton(text="⚡️ همین الان تست رایگان بگیر", callback_data=f"pay_wallet_{plan_key}", style="success")],
         [InlineKeyboardButton(text="🔙 بازگشت", callback_data="plans", style="danger")],
     ])
 
@@ -556,7 +556,7 @@ def admin_user_actions_keyboard(uid: str, is_blocked: bool = False, show_pm_link
 
 def admin_pm_cancel_keyboard(uid: str):
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ انصراف از پیام خصوصی", callback_data=f"useropen_{uid}", style="danger")],
+        [InlineKeyboardButton(text="��� انصراف از پیام خصوصی", callback_data=f"useropen_{uid}", style="danger")],
     ])
 
 
