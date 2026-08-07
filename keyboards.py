@@ -247,8 +247,8 @@ def plans_menu():
         [InlineKeyboardButton(text="🌐 سرور Gaming (WireGuard)", callback_data="plans_gaming", style="success")],
         [InlineKeyboardButton(text="✨〰️〰️〰️〰️〰️✨", callback_data="noop")],
         [InlineKeyboardButton(text="🚀 کانفیگ خودتو بساز (ویژه VIP) 🛠", callback_data="cbuild_start", style="primary")],
-        [InlineKeyboardButton(text="✨〰️〰️〰️〰️〰��✨", callback_data="noop")],
-        [InlineKeyboardButton(text="��� بازگشت به منوی اصلی", callback_data="back", style="danger")],
+        [InlineKeyboardButton(text="✨〰️〰️〰️〰️〰️✨", callback_data="noop")],
+        [InlineKeyboardButton(text="🔙 بازگشت به منوی اصلی", callback_data="back", style="danger")],
     ])
 
 
@@ -258,7 +258,7 @@ def custom_build_payment_keyboard():
     ]
     if UNIQUEPAY_ENABLED:
         buttons.append(
-            [InlineKeyboardButton(text="🌐 پرداخت آن��این (تایی���� خودکار)", callback_data="cbuild_pay_online", style="success")]
+            [InlineKeyboardButton(text="🌐 پرداخت آنلاین (تایید خودکار)", callback_data="cbuild_pay_online", style="success")]
         )
     buttons.append([InlineKeyboardButton(text="💳 پرداخت کارت به کارت", callback_data="cbuild_pay_card", style="success")])
     buttons.append([InlineKeyboardButton(text="🔙 انصراف", callback_data="plans", style="danger")])
@@ -556,7 +556,7 @@ def admin_user_actions_keyboard(uid: str, is_blocked: bool = False, show_pm_link
 
 def admin_pm_cancel_keyboard(uid: str):
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="��� انصراف از پیام خصوصی", callback_data=f"useropen_{uid}", style="danger")],
+        [InlineKeyboardButton(text="❌ انصراف از پیام خصوصی", callback_data=f"useropen_{uid}", style="danger")],
     ])
 
 
