@@ -23,6 +23,7 @@ class UserStates(StatesGroup):
     waiting_custom_days = State()
     waiting_custom_name = State()
     waiting_custom_card_receipt = State()
+    waiting_discount_cbuild = State()         # کد تخفیف واردشده در مرحله‌ی پرداخت «بساز سرویس خودت»/تمدید
 
 
 class AdminStates(StatesGroup):
