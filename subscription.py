@@ -202,6 +202,32 @@ def _parse_configs(body: str) -> list[str]:
     return [ln for ln in lines if ln.startswith(_CONFIG_SCHEMES)]
 
 
+def format_service_package(volume_gb, days, plan_key: str | None = None) -> tuple[str, str]:
+    """متن نمایشی حجم/مدت سرویس را می‌سازد. برای پلن تست رایگان (FREE_TEST_PLAN_KEY) به‌جای
+    گیگابایت/روز خام (که برای مقادیر کوچک اعشاری مثل 0.0416 زشت و گیج‌کننده می‌شود)
+    از مگابایت/ساعت خوانا استفاده می‌کند؛ برای بقیه‌ی پلن‌ها همان قالب قبلی حفظ می‌شود.
+    """
+    from config import FREE_TEST_PLAN_KEY
+    if plan_key == FREE_TEST_PLAN_KEY and volume_gb is not None and days is not None:
+        volume_mb = round(volume_gb * 1024)
+        if volume_mb < 1024:
+            volume_text = f"{volume_mb} مگابایت"
+        else:
+            gb_value = volume_mb / 1024
+            volume_text = f"{gb_value:.0f} گیگابایت" if gb_value == int(gb_value) else f"{gb_value:.2f} گیگابایت"
+        hours = days * 24
+        if hours < 24:
+            hv = int(round(hours)) if float(hours) == int(round(hours)) else round(hours, 1)
+            days_text = f"{hv} ساعت"
+        else:
+            dv = int(days) if float(days) == int(days) else round(days, 2)
+            days_text = f"{dv} روز"
+        return volume_text, days_text
+    volume_text = f"{volume_gb} گیگابایت" if volume_gb else "طبق بسته‌ی انتخابی"
+    days_text = f"{days} روز" if days else "نامحدود"
+    return volume_text, days_text
+
+
 async def extract_configs(sub_url: str, _depth: int = 0, _retry: int = 0) -> list[str] | None:
     """کانفیگ‌های تکی (vmess/vless/trojan/...) را از داخل یک لینک ساب استخراج
     می‌کند، حتی اگر پشت یک صفحه‌ی میرور «نمایش در مرورگر» مثل down.hplo.ir/view
@@ -223,7 +249,21 @@ async def extract_configs(sub_url: str, _depth: int = 0, _retry: int = 0) -> lis
     try:
         timeout = aiohttp.ClientTimeout(total=20, connect=10)
         async with aiohttp.ClientSession(timeout=timeout, headers=_CLIENT_HEADERS) as session:
-            status, headers, body, final_url = await _get(session, sub_url.strip())
+            try:
+                status, headers, body, final_url = await _get(session, sub_url.strip())
+            except aiohttp.ClientConnectorCertificateError:
+                # برخی پنل‌های خودمیزبان از گواهینامه‌ی TLS معتبر/خودامضا استفاده می‌کنند که
+                # باعث می‌شد این دکمه همیشه با خطای SSL شکست بخورد و کاربر هیچ کانفیگی دریافت نکند؛ یک بار
+                # دیگر بدون اعتبارسنجی TLS تلاش می‌کنیم تا فقط کانفیگ‌ها استخراج شوند (خود لینک قبلاً محرمانه برای همین کاربر ارسال شده).
+                no_ssl_timeout = aiohttp.ClientTimeout(total=20, connect=10)
+                async with aiohttp.ClientSession(timeout=no_ssl_timeout, headers=_CLIENT_HEADERS) as insecure_session:
+                    async with insecure_session.get(sub_url.strip(), allow_redirects=True, ssl=False) as resp:
+                        status = resp.status
+                        try:
+                            body = await resp.text(errors="ignore")
+                        except Exception:
+                            body = ""
+                        final_url = str(resp.url)
 
             configs = _parse_configs(body)
             if configs:
