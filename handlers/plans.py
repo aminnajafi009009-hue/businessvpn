@@ -370,9 +370,12 @@ async def _show_plan_payment_methods(callback: types.CallbackQuery, state: FSMCo
         return
 
     if plan_key == FREE_TEST_PLAN_KEY:
+        # fix: متن این صفحه با تکنیک‌های روان‌شناسی فروش (اثبات بدون ریسک، حذف اصطکاک
+        # تصمیم‌گیری، تأکید بر فوریت/سادگی) بازنویسی شد.
         text = (
-            "🛡 قبل از پرداخت، فقط به وعده اعتماد نکن؛ مدرک ببین\n"
-            "روی دکمه زیر بزن و سرعت و پایداری سرویس های مارو امتحان کن✅"
+            "🛡 پیش از پرداخت، فقط حرف ما رو باور نکن — خودت امتحانش کن!\n\n"
+            "۱۰۰٪ رایگان و بدون نیاز به هیچ پرداختی — همین الان سرعت و پایداری واقعی سرویس رو با چشم خودت ببین.\n\n"
+            "⚡️ روی دکمه‌ی سبز زیر بزن; کانفیگ تستت همین الان و کاملاً خودکار از پنل فعال ساخته و برات ارسال می‌شود. ✅"
         )
         await show_menu_with_sticker(
             callback.bot, callback.message.chat.id, "plan_payment_method", text,
@@ -642,7 +645,7 @@ async def finalize_custom_online_payment(bot, payment: dict) -> int | None:
             f"🆔 {payment['telegram_id']}\n"
             f"📦 حجم: {volume} گیگ\n⏳ مدت: {days} روز\n"
             + (f"🔤 نام: {custom_name}\n" if custom_name else "")
-            + f"💰 {payment['price']:,} تومان\n🔢 شماره سفارش: {order_id}",
+            + f"💰 {payment['price']:,} تومان\n🔢 شماره سف��رش: {order_id}",
         )
     else:
         await bot.send_message(
@@ -968,7 +971,7 @@ async def my_configs_vip(callback: types.CallbackQuery):
     if not configs:
         await show_menu_with_sticker(callback.bot, callback.message.chat.id, "my_configs_list_empty", 
             "🚀 شما هنوز هیچ سرویس VIPی خریداری نکرده‌اید.",
-            reply_markup=back_button("my_configs", "🔙 بازگشت"),
+            reply_markup=back_button("my_configs", "🔙 ��ازگشت"),
         )
     else:
         await show_menu_with_sticker(callback.bot, callback.message.chat.id, "my_configs_list_has", 
@@ -1557,7 +1560,7 @@ async def _show_custom_summary(bot, chat_id: int, user_id, state: FSMContext):
 
 
 # ✅ دکمه‌ی «انتخاب روش پرداخت دیگر» روی صفحه‌ی پرداخت کارت‌به‌کارت سرویس سفارشی:
-# فاکتور فعلی را منقضی می‌کند و دوباره صفحه‌ی خلاصه و انتخاب روش پرداخت را نمایش می‌دهد.
+# فاکتور ف��لی را منقضی می‌کند و دوباره صفحه‌ی خلاصه و انتخاب روش پرداخت را نمایش می‌دهد.
 @router.callback_query(F.data == "cbuild_change_payment")
 async def cbuild_change_payment(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
