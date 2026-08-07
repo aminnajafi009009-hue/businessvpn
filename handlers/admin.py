@@ -2017,7 +2017,7 @@ async def admin_discount_delete_confirm(callback: types.CallbackQuery):
     db.delete_discount_by_id(discount_id)
     await callback.answer("✅ کد تخفیف حذف شد.", show_alert=True)
     discounts = db.get_all_discounts()
-    text = "🎟 کدهای تخفیف فعال:\n\nبرای مشاهده و و��رایش جزئیات هر کد، روی آن بزنید 👇" if discounts else \
+    text = "🎟 کدهای تخفیف فعال:\n\nبرای مشاهده و ویرایش جزئیات هر کد، روی آن بزنید 👇" if discounts else \
         "🎟 هیچ کد تخفیفی هنوز ثبت نشده.\n\nبرای ساخت کد جدید، دکمه‌ی زیر را بزنید 👇"
     await callback.message.edit_text(text, reply_markup=admin_discount_menu(discounts))
 
@@ -2756,7 +2756,7 @@ async def admin_new_vip_category_start(callback: types.CallbackQuery, state: FSM
 async def admin_new_vip_category_apply(message: types.Message, state: FSMContext):
     name = (message.text or "").strip()
     if not name:
-        await message.answer("❌ نام نمی‌تواند خالی باشد؛ ��وباره ارسال کنید:")
+        await message.answer("❌ نام نمی‌تواند خالی باشد؛ دوباره ارسال کنید:")
         return
     cat = db.create_vip_category(name)
     await message.answer(
@@ -3460,7 +3460,7 @@ async def admin_broadcast_send(message: types.Message, state: FSMContext):
 
 
 # ---------------------------------------------------------------------------
-# 📚 مدیریت راهنما و اموزش‌ها — افزودن/ویرای��/حذف/تغییر ترتیب (متن/عکس/فیلم)
+# 📚 مدیریت راهنما و اموزش‌ها — افزودن/ویرایش/حذف/تغییر ترتیب (متن/عکس/فیلم)
 # ---------------------------------------------------------------------------
 def _guide_detail_text(guide: dict) -> str:
     text = f"📚 {guide['title']}"
@@ -4142,7 +4142,7 @@ async def admin_free_test_settings_save(message: types.Message, state: FSMContex
     volume_str, duration_str, unit_str, price_str = parts
     unit = _parse_free_test_unit(unit_str)
     if unit is None:
-        await message.answer("❌ واحد مدت نامعتبر است؛ فقط «ساعت» یا «��وز» مجاز است.\n\nدوباره تلاش کنید یا /cancel بزنید.")
+        await message.answer("❌ واحد مدت نامعتبر است؛ فقط «ساعت» یا «روز» مجاز است.\n\nدوباره تلاش کنید یا /cancel بزنید.")
         return
     volume_mb = parse_int_in_range(volume_str, FREE_TEST_MIN_VOLUME_MB, FREE_TEST_MAX_VOLUME_MB)
     if unit == "hours":
