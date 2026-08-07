@@ -205,7 +205,7 @@ def _parse_configs(body: str) -> list[str]:
 async def extract_configs(sub_url: str, _depth: int = 0, _retry: int = 0) -> list[str] | None:
     """کانفیگ‌های تکی (vmess/vless/trojan/...) را از داخل یک لینک ساب استخراج
     می‌کند، حتی اگر پشت یک صفحه‌ی میرور «نمایش در مرورگر» مثل down.hplo.ir/view
-    پنهان شده باشد (همان منط�� extract_meta برای پیدا کردن لینک واقعی).
+    پنهان شده باشد (همان منطق extract_meta برای پیدا کردن لینک واقعی).
 
     این تابع دقیقاً همان چیزی است که هم ربات (mirrorconfigs_) و هم مینی‌اپ
     (api/services/<id>/configs) استفاده می‌کنند؛ اگر روی مینی‌اپ جواب می‌دهد ولی
