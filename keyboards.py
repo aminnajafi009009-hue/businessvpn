@@ -252,7 +252,7 @@ def plans_menu():
     ])
 
 
-def custom_build_payment_keyboard():
+def custom_build_payment_keyboard(show_discount: bool = True):
     buttons = [
         [InlineKeyboardButton(text="👛 پرداخت از کیف پول", callback_data="cbuild_pay_wallet", style="success")],
     ]
@@ -261,6 +261,8 @@ def custom_build_payment_keyboard():
             [InlineKeyboardButton(text="🌐 پرداخت آنلاین (تایید خودکار)", callback_data="cbuild_pay_online", style="success")]
         )
     buttons.append([InlineKeyboardButton(text="💳 پرداخت کارت به کارت", callback_data="cbuild_pay_card", style="success")])
+    if show_discount:
+        buttons.append([InlineKeyboardButton(text="🎟 ثبت کد تخفیف", callback_data="discount_cbuild", style="primary")])
     buttons.append([InlineKeyboardButton(text="🔙 انصراف", callback_data="plans", style="danger")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -412,7 +414,7 @@ def my_configs_list_keyboard(configs, icon: str, back_callback: str):
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def config_detail_keyboard(cfg_id, sub_link_url: str | None = None, has_qr: bool = False, back_callback: str = "my_configs_vip"):
+def config_detail_keyboard(cfg_id, sub_link_url: str | None = None, has_qr: bool = False, back_callback: str = "my_configs_vip", sub_link_disabled: bool = False, can_manage_link: bool = False):
     """کیبورد جزئیات سرویس VIP: تمدید + کیوآرکد + لینک ساب + حذف سرویس."""
     buttons = [
         [InlineKeyboardButton(text="🔁 تمدید سرویس", callback_data=f"renew_{cfg_id}", style="success")],
@@ -426,9 +428,23 @@ def config_detail_keyboard(cfg_id, sub_link_url: str | None = None, has_qr: bool
         buttons.append(row)
     if sub_link_url:
         buttons.append([InlineKeyboardButton(text="🔗 دریافت کانفیگ‌های تکی", callback_data=f"mirrorconfigs_{cfg_id}", style="success")])
+    if can_manage_link:
+        buttons.append([InlineKeyboardButton(text="🔄 تغییر لینک ساب", callback_data=f"usersvclink_{cfg_id}", style="primary")])
+        if sub_link_disabled:
+            buttons.append([InlineKeyboardButton(text="▶️ فعال‌کردن لینک ساب", callback_data=f"usersvcenable_{cfg_id}", style="success")])
+        else:
+            buttons.append([InlineKeyboardButton(text="⏸ غیرفعال‌کردن لینک ساب", callback_data=f"usersvcdisable_{cfg_id}", style="danger")])
     buttons.append([InlineKeyboardButton(text="🗑 حذف سرویس", callback_data=f"delconfig_{cfg_id}", style="danger")])
     buttons.append([InlineKeyboardButton(text="🔙 بازگشت به سرویس‌های VIP من", callback_data=back_callback, style="danger")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def confirm_change_sublink_keyboard(cfg_id, back_callback: str = "my_configs_vip"):
+    """پیام هشدار قبل از تغییر واقعی لینک ساب (قطع دسترسی سایرین)."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 بازگشت", callback_data=f"viewconfig_{cfg_id}", style="danger")],
+        [InlineKeyboardButton(text="✅ تغییر لینک ساب", callback_data=f"usersvclinkconfirm_{cfg_id}", style="success")],
+    ])
 
 
 def gaming_config_detail_keyboard(cfg_id, sub_link_url: str | None = None, back_callback: str = "my_configs_gaming"):
@@ -675,8 +691,11 @@ def admin_service_detail_keyboard(cfg: dict, uid: str):
 
         if cfg.get("source") in ("shahrah", "marzban", "pasargad") and cfg.get("service_id") and cfg.get("panel_id"):
             buttons.append([InlineKeyboardButton(text="🔁 تمدید از پنل", callback_data=f"panelrenew_{cfg_id}", style="success")])
-            buttons.append([InlineKeyboardButton(text="⏸ غیرفعال‌کردن در پنل", callback_data=f"paneldisable_{cfg_id}", style="danger")])
-            buttons.append([InlineKeyboardButton(text="▶️ فعال‌کردن در پنل", callback_data=f"panelenable_{cfg_id}", style="primary")])
+            buttons.append([InlineKeyboardButton(text="✅ تغییر لینک ساب", callback_data=f"svcedit_link_{cfg_id}", style="primary")])
+            if cfg.get("sub_link_disabled"):
+                buttons.append([InlineKeyboardButton(text="▶️ فعال‌کردن لینک ساب", callback_data=f"panelenable_{cfg_id}", style="success")])
+            else:
+                buttons.append([InlineKeyboardButton(text="⏸ غیرفعال‌کردن لینک ساب", callback_data=f"paneldisable_{cfg_id}", style="danger")])
 
         buttons.append([InlineKeyboardButton(text="🗑 حذف سرویس (مخفی از کاربر)", callback_data=f"svcdelete_{cfg_id}", style="danger")])
 
