@@ -1,4 +1,4 @@
-"""
+="""
 handlers/plans.py
 نمایش دسته‌بندی سرویس‌ها (VIP / Gaming)، اعمال کد تخفیف، خرید سرویس
 (با دو روش پرداخت: کیف پول و کارت‌به‌کارت)، و نمایش سرویس‌های خریداری‌شده کاربر.
@@ -22,10 +22,11 @@ import crypto
 import uniquepay
 import alerts
 import bot_info
-from subscription import fetch_subscription_info, extract_configs, format_bytes, format_expire, usage_bar, days_remaining, is_config_expired
+from subscription import fetch_subscription_info, extract_configs, format_bytes, format_expire, usage_bar, days_remaining, is_config_expired, format_service_package
 from utils import parse_int_in_range, is_duplicate_action, format_deadline_time, progress_bar, now_tehran_naive, show_menu_with_sticker, apply_random_amount_variation
 from states import UserStates
 from handlers.panel_admin import auto_fulfill_vip_via_panel, auto_fulfill_custom_via_panel
+import panels
 from config import (
     ADMIN_ID,
     PLANS_INTRO_TEXT,
@@ -856,7 +857,9 @@ async def pay_with_card(callback: types.CallbackQuery, state: FSMContext):
         f"💳 شماره کارت:\n{bot_info.get('card_number')}\n\n"
         f"👤 به نام: {bot_info.get('card_holder')}\n\n"
         f"📸 پس از واریز، عکس رسید پرداخت را همینجا ارسال کنید.\n\n"
-        f"⏱ این شماره کارت و قیمت تا ساعت {deadline_str} (۳۰ دقیقه) معتبر است. لطفاً تا این ساعت رسید پرداخت را ارسال کنید، وگرنه این فاکتور به‌طور خودکار منقضی و حذف می‌شود.",
+        f"⏱ این شماره کارت و قیمت تا ساعت {deadline_str} (۳۰ دقیقه) معتبر است. لطفاً تا این ساعت رسید پرداخت را ارسال کنید، وگرنه این فاکتور به‌طور خودکار منقضی و حذف می‌شود.\n\n"
+        f"*⚠️ دقیقاً همین مبلغ ({final_price:,} تومان) را واریز کنید تا پرداختتان شناسایی و بلافاصله تایید شود.*",
+        parse_mode="Markdown",
         reply_markup=card_payment_actions_keyboard(bot_info.get('card_number'), final_price, f"changepay_plan_{plan_key}"),
     )
     await callback.answer()
@@ -1133,7 +1136,11 @@ async def view_config(callback: types.CallbackQuery):
             f"📆 تاریخ خرید: {cfg['created_at']}"
         )
 
-        kb = config_detail_keyboard(cfg_id, sub_link_url=sub_url, has_qr=bool(cfg.get("qr_file_id")))
+        can_manage_link = bool(sub_url) and cfg.get("source") in ("shahrah", "marzban", "pasargad") and cfg.get("service_id") and cfg.get("panel_id")
+        kb = config_detail_keyboard(
+            cfg_id, sub_link_url=sub_url, has_qr=bool(cfg.get("qr_file_id")),
+            sub_link_disabled=bool(cfg.get("sub_link_disabled")), can_manage_link=can_manage_link,
+        )
         try:
             await show_menu_with_sticker(callback.bot, callback.message.chat.id, "config_detail", text, parse_mode="Markdown", reply_markup=kb)
         except Exception as e:
@@ -1164,6 +1171,107 @@ async def view_config(callback: types.CallbackQuery):
             )
         except Exception:
             logger.exception("خطا در ارسال پیام خطای fallback برای cfg_id=%s", cfg_id)
+
+
+# ---------------------------------------------------------------------------
+# 🔄 تغییر/غیرفعالسازی لینک ساب توسط خود کاربر (برای سرویس‌های ساخته‌شده از پنل)
+# ---------------------------------------------------------------------------
+@router.callback_query(F.data.startswith("usersvclink_"))
+async def user_change_sublink_warn(callback: types.CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    cfg_id = int(callback.data.replace("usersvclink_", ""))
+    cfg = db.get_config_by_id(cfg_id)
+    if not cfg or not user or cfg["user_id"] != user["id"] or cfg.get("deleted"):
+        await callback.answer("❌ این سرویس متعلق به شما نیست یا یافت نشد.", show_alert=True)
+        return
+    await callback.message.answer(
+        "⚠️ تغییر لینک ساب\n\n"
+        "اگر فکر می‌کنید کسی به سرویس شما دسترسی دارد، با تغییر لینک ساب می‌توانید دسترسی دیگران را قطع کنید.\n\n"
+        "توجه: بعد از تغییر، لینک ساب قبلی شما دیگر کار نخواهد کرد و باید از لینک جدید استفاده کنید.",
+        reply_markup=confirm_change_sublink_keyboard(cfg_id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("usersvclinkconfirm_"))
+async def user_change_sublink_confirm(callback: types.CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    cfg_id = int(callback.data.replace("usersvclinkconfirm_", ""))
+    cfg = db.get_config_by_id(cfg_id)
+    if not cfg or not user or cfg["user_id"] != user["id"] or cfg.get("deleted"):
+        await callback.answer("❌ این سرویس متعلق به شما نیست یا یافت نشد.", show_alert=True)
+        return
+    if not cfg.get("panel_id") or not cfg.get("service_id") or cfg.get("source") not in ("shahrah", "marzban", "pasargad"):
+        await callback.answer("❌ تغییر خودکار لینک برای این سرویس فعال نیست؛ با پشتیبانی تماس بگیر.", show_alert=True)
+        return
+    panel = db.get_vpn_panel(cfg["panel_id"])
+    if not panel:
+        await callback.answer("❌ نمونه پنل پیدا نشد.", show_alert=True)
+        return
+    await callback.answer("⏳ در حال ساخت لینک جدید...")
+    ok, new_link, new_service_id, raw_data, msg = await panels.renew_service(panel, cfg["service_id"], remote_ref=None, volume_gb=None, days=None)
+    if not ok or not new_link:
+        await callback.message.answer(
+            "⚠️ ساخت خودکار لینک جدید ممکن نشد. لطفاً برای تغییر لینک ساب با پشتیبانی تماس بگیرید.",
+            reply_markup=back_button(f"viewconfig_{cfg_id}", "🔙 بازگشت"),
+        )
+        return
+    db.update_config_link(cfg_id, crypto.encrypt_config(new_link))
+    if new_service_id:
+        db.update_config(cfg_id, cfg["plan"], crypto.encrypt_config(new_link), expiry=cfg.get("expiry"), service_id=new_service_id, panel_id=cfg["panel_id"])
+    db.set_config_link_disabled(cfg_id, False)
+    await callback.message.answer(
+        "✅ لینک ساب شما با موفقیت تغییر کرد و دسترسی هر فرد دیگری قطع شد.",
+        reply_markup=back_button(f"viewconfig_{cfg_id}", "🔙 بازگشت به سرویس"),
+    )
+
+
+@router.callback_query(F.data.startswith("usersvcdisable_"))
+async def user_disable_sublink(callback: types.CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    cfg_id = int(callback.data.replace("usersvcdisable_", ""))
+    cfg = db.get_config_by_id(cfg_id)
+    if not cfg or not user or cfg["user_id"] != user["id"] or cfg.get("deleted"):
+        await callback.answer("❌ این سرویس متعلق به شما نیست یا یافت نشد.", show_alert=True)
+        return
+    if not cfg.get("panel_id") or not cfg.get("service_id"):
+        await callback.answer("❌ این قابلیت برای این سرویس فعال نیست.", show_alert=True)
+        return
+    panel = db.get_vpn_panel(cfg["panel_id"])
+    if not panel:
+        await callback.answer("❌ نمونه پنل پیدا نشد.", show_alert=True)
+        return
+    ok, msg = await panels.disable_service(panel, cfg["service_id"])
+    if not ok:
+        await callback.answer(f"❌ {msg}", show_alert=True)
+        return
+    db.set_config_link_disabled(cfg_id, True)
+    await callback.answer("✅ لینک ساب غیرفعال شد.", show_alert=True)
+    await view_config(callback)
+
+
+@router.callback_query(F.data.startswith("usersvcenable_"))
+async def user_enable_sublink(callback: types.CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    cfg_id = int(callback.data.replace("usersvcenable_", ""))
+    cfg = db.get_config_by_id(cfg_id)
+    if not cfg or not user or cfg["user_id"] != user["id"] or cfg.get("deleted"):
+        await callback.answer("❌ این سرویس متعلق به شما نیست یا یافت نشد.", show_alert=True)
+        return
+    if not cfg.get("panel_id") or not cfg.get("service_id"):
+        await callback.answer("❌ این قابلیت برای این سرویس فعال نیست.", show_alert=True)
+        return
+    panel = db.get_vpn_panel(cfg["panel_id"])
+    if not panel:
+        await callback.answer("❌ نمونه پنل پیدا نشد.", show_alert=True)
+        return
+    ok, msg = await panels.enable_service(panel, cfg["service_id"])
+    if not ok:
+        await callback.answer(f"❌ {msg}", show_alert=True)
+        return
+    db.set_config_link_disabled(cfg_id, False)
+    await callback.answer("✅ لینک ساب فعال شد.", show_alert=True)
+    await view_config(callback)
 
 
 # حداکثر واقعی تلگرام برای متن یک پیام ۴۰۹۶ کاراکتر است؛ برای امنیت بیشتر
@@ -1573,6 +1681,66 @@ async def cbuild_change_payment(callback: types.CallbackQuery, state: FSMContext
     await callback.answer()
 
 
+@router.callback_query(F.data == "discount_cbuild")
+async def discount_for_cbuild(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    if data.get("custom_price") is None:
+        await callback.answer("❌ اطلاعات منقضی شده؛ دوباره از اول شروع کن.", show_alert=True)
+        return
+    await show_menu_with_sticker(callback.bot, callback.message.chat.id, "discount_code_entry", "🎟 کد تخفیف خود را وارد کنید:")
+    await state.set_state(UserStates.waiting_discount_cbuild)
+    await callback.answer()
+
+
+@router.message(UserStates.waiting_discount_cbuild)
+async def check_discount_for_cbuild(message: types.Message, state: FSMContext):
+    code = message.text.strip().upper()
+    discount = db.get_discount(code)
+    data = await state.get_data()
+    base_price = data.get("custom_price")
+
+    if base_price is None:
+        await message.answer("❌ مشکلی پیش آمد، دوباره از منوی سرویس‌ها شروع کنید.", reply_markup=back_button("plans", "🔙 بازگشت"))
+        await state.set_state(None)
+        return
+
+    if discount is None or discount["uses"] <= 0 or db.discount_is_expired(discount):
+        await message.answer("❌ کد تخفیف نامعتبر یا تمام شده.", reply_markup=custom_build_payment_keyboard())
+        await state.set_state(None)
+        return
+
+    if not db.discount_allowed_for_user(discount, message.from_user.id):
+        await message.answer("❌ شما مجاز به استفاده از این کد تخفیف نیستید.", reply_markup=custom_build_payment_keyboard())
+        await state.set_state(None)
+        return
+
+    if discount.get("max_uses_per_user"):
+        user = db.get_user(message.from_user.id)
+        if user and db.user_discount_uses(discount["id"], user["id"]) >= discount["max_uses_per_user"]:
+            await message.answer("❌ سهمیه‌ی استفاده‌ی شما از این کد تمام شده.", reply_markup=custom_build_payment_keyboard())
+            await state.set_state(None)
+            return
+
+    if discount.get("min_order_amount") and base_price < discount["min_order_amount"]:
+        await message.answer(
+            f"❌ این کد فقط برای خریدهای بالای {discount['min_order_amount']:,} تومان قابل استفاده است.",
+            reply_markup=custom_build_payment_keyboard(),
+        )
+        await state.set_state(None)
+        return
+
+    final_price = db.compute_discount(discount, base_price)
+    await state.update_data(custom_price=final_price, custom_discount_code=code)
+    user = db.get_user(message.from_user.id)
+    if user:
+        db.use_discount(code, user["id"])
+    await state.set_state(None)
+    await message.answer(
+        f"✅ کد تخفیف اعمال شد. قیمت جدید: {final_price:,} تومان",
+        reply_markup=custom_build_payment_keyboard(show_discount=False),
+    )
+
+
 @router.callback_query(F.data == "cbuild_pay_wallet")
 async def cbuild_pay_wallet(callback: types.CallbackQuery, state: FSMContext):
     if is_duplicate_action(f"cbuildwalletbuy_{callback.from_user.id}"):
@@ -1753,7 +1921,8 @@ async def cbuild_pay_card(callback: types.CallbackQuery, state: FSMContext):
         f"👤 به نام: {bot_info.get('card_holder')}\n\n"
         f"📸 پس از واریز، عکس رسید پرداخت را همینجا ارسال کنید.\n\n"
         f"⏱ این شماره کارت و قیمت تا ساعت {deadline_str} (۳۰ دقیقه) معتبر است. لطفاً تا این ساعت رسید پرداخت را ارسال کنید، وگرنه این فاکتور به‌طور خودکار منقضی و حذف می‌شود.\n\n"
-        f"⚠️ لطفا دقیقاً همین مبلغ رو واریز کنید تا پرداخت شما شناسایی و تایید بشه.",
+        f"*⚠️ دقیقاً همین مبلغ ({invoice_price:,} تومان) رو واریز کنید تا پرداخت شما شناسایی و بلافاصله تایید بشه.*",
+        parse_mode="Markdown",
         reply_markup=card_payment_actions_keyboard(bot_info.get('card_number'), invoice_price, "cbuild_change_payment"),
     )
     await callback.answer()
