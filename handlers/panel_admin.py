@@ -676,9 +676,21 @@ async def vpn_catalog_pick_set(callback: types.CallbackQuery, state: FSMContext)
         return
 
     db.set_panel_plan_map(scope, int(scope_id), panel_id, chosen["ref"], chosen["name"])
+
+    # fix: اگر این یک نگاشت پیش‌فرض برای کل دسته بود (scope=vip_category)، نگاشت‌های اختصاصی
+    # قدیمی‌تر تک‌تک پلن‌های همان دسته را هم پاک می‌کنیم تا پیش‌فرض جدید واقعاً
+    # روی همه‌ی پلن‌های دسته اعمال شود (ورنه فقط برای پلن‌های بدون نگاشت اختصاصی).
+    cleared_note = ""
+    if scope == "vip_category":
+        db.clear_panel_plan_overrides_for_category(int(scope_id))
+        cleared_note = (
+            "\n\n♻️ نگاشت‌های اختصاصی قدیمی پلن‌های این دسته (اگر وجود داشت) پاک شد تا این "
+            "پیش‌فرض واقعاً روی همه‌ی پلن‌های این دسته اعمال شود."
+        )
+
     panel = db.get_vpn_panel(panel_id)
     await callback.message.edit_text(
-        f"✅ ذخیره شد: این بخش از این پس به «{chosen['name']}» (ref: {chosen['ref']}) از {panels.panel_label(panel)} وصل می‌شود.",
+        f"✅ ذخیره شد: این بخش از این پس به «{chosen['name']}» (ref: {chosen['ref']}) از {panels.panel_label(panel)} وصل می‌شود.{cleared_note}",
         reply_markup=admin_vpn_panel_map_menu_keyboard(panel_id),
     )
     await callback.answer()
