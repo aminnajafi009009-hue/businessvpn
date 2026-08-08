@@ -256,7 +256,35 @@ async def renew_user(panel: dict, username: str, template_id: int):
 
 
 async def renew_user_custom(panel: dict, username: str, volume_gb, days):
-    body = {"data_limit": _data_limit_bytes(volume_gb), "expire": _expire_from_days(days), "status": "active"}
+    """تمدید سرویس موجود: برخلاف ساخت سرویس جدید، حجم و روزهای انتخاب‌شده به مقدار/تاریخ
+    باقی‌مانده‌ی فعلی سرویس اضافه می‌شود (نه اینکه با یک مقدار کاملاً تازه
+    از الان جایگزین شود)؛ یعنی تمدید واقعاً روی اعتبار قبلی کاربر
+    می‌نشیند، نه اینکه آن را ریست کند."""
+    ok, current, _ = await get_user(panel, username)
+    current = current if ok and isinstance(current, dict) else {}
+    current_data_limit = current.get("data_limit") or 0
+    current_expire = current.get("expire") or 0
+
+    add_bytes = _data_limit_bytes(volume_gb)
+    if current_data_limit == 0 or add_bytes == 0:
+        # سرویس فعلی از قبل نامحدود بوده یا حجم جدیدی برای اضافه‌شدن انتخاب نشده: نامحدود می‌ماند.
+        new_data_limit = 0
+    else:
+        new_data_limit = current_data_limit + add_bytes
+
+    add_seconds = 0
+    try:
+        d = float(days or 0)
+        add_seconds = int(d * 86400) if d > 0 else 0
+    except (TypeError, ValueError):
+        add_seconds = 0
+    if add_seconds == 0:
+        new_expire = current_expire
+    else:
+        base = current_expire if current_expire and current_expire > int(time.time()) else int(time.time())
+        new_expire = base + add_seconds
+
+    body = {"data_limit": new_data_limit, "expire": new_expire, "status": "active"}
     return await _request(panel, "PUT", f"/api/user/{username}", json_body=body)
 
 
