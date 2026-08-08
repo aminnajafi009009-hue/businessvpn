@@ -187,19 +187,114 @@ async def extract_meta(sub_url: str, _depth: int = 0, _retry: int = 0) -> dict |
         return None
 
 
+def _configs_in_text(text: str) -> list[str]:
+    """هر خطی که با یکی از اسکیم‌های کانفیگ شروع شود را برمی‌گرداند (برای استفاده‌ی مشترک در چند جای این فایل)."""
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    return [ln for ln in lines if ln.startswith(_CONFIG_SCHEMES)]
+
+
+def _try_base64_decode(text: str) -> str | None:
+    try:
+        return base64.b64decode(text + "=" * (-len(text) % 4)).decode("utf-8", errors="ignore")
+    except Exception:
+        return None
+
+
+def _configs_from_json_envelope(text: str) -> list[str]:
+    """برخی پنل‌ها به‌جای متن خام/base64، یک خروجی JSON برمی‌گردانند
+    (مثلاً یک لیست ساده از رشته‌های کانفیگ یا یک دیکشنری با کلیدی مثل configs/links/data/result).
+    بدون یک نمونه‌ی واقعی از این قالب، بی‌ضرر بوده و فقط best-effort است."""
+    import json as _json
+    stripped = (text or "").strip()
+    if not stripped or stripped[0] not in "{[":
+        return []
+    try:
+        data = _json.loads(stripped)
+    except Exception:
+        return []
+
+    found: list[str] = []
+
+    def _walk(node):
+        if isinstance(node, str):
+            s = node.strip()
+            if s.startswith(_CONFIG_SCHEMES):
+                found.append(s)
+        elif isinstance(node, list):
+            for item in node:
+                _walk(item)
+        elif isinstance(node, dict):
+            for key in ("configs", "links", "data", "result", "items", "proxies", "subscriptions"):
+                if key in node:
+                    _walk(node[key])
+            # اگر هیچکدام از کلیدهای شناخته‌شده نبود، همه‌ی مقادیر رو بررسی کن (best-effort)
+            if not found:
+                for v in node.values():
+                    _walk(v)
+
+    _walk(data)
+    return found
+
+
 def _parse_configs(body: str) -> list[str]:
-    """بدنه‌ی خام لینک ساب (معمولاً base64) را به لیست کانفیگ‌های تکی تبدیل می‌کند."""
+    """بدنه‌ی خام لینک ساب را به لیست کانفیگ‌های تکی تبدیل می‌کند؛ چند قالب متفاوت را به این ترتیب پشتیبانی می‌کند (هر کدام فقط وقتی قبلی چیزی پیدا نشده امتحان می‌شود، تا داده‌های معتبر خراب نشود):
+    ۱) متن خام (بدون هیچ رمزگشایی) — اگر بدنه از قبل شامل خطوط کانفیگ خام باشد
+    ۲) اگر چند خط دارد: هر خط جداگانه خودش base64-شده (برخی پنل‌ها هر سطر را جداگانه رمزنگاری می‌کنند)
+    ۳) base64 کل بدنه (متداول‌ترین فرمت v2rayNG/Clash)
+    ۴) یک خروجی JSON شامل لیستی از کانفیگ‌ها
+
+    ترتیب بالا عمدی است: وقتی چندین خط داریم (۲)، decode-کردن کل بدنه به-عنوان یک بلاک واحد (۳) می‌تواند به-خاطر از-بین-رفتن padding بین خطوط، خروجی مخدوش/آشغال بدهد، برای همین قبل از تلاش (۳) بررسی می‌شود.
+    """
     if not body:
         return []
-    text = body.strip()
-    try:
-        decoded = base64.b64decode(text + "=" * (-len(text) % 4)).decode("utf-8", errors="ignore")
-    except Exception:
-        decoded = None
+    # حذف BOM/کاراکترهای نامرئی احتمالی که بعضی پنل‌ها اول پاسخ می‌فرستند
+    text = body.strip().lstrip("﻿​‌")
 
-    candidate = decoded if decoded and any(s in decoded for s in _CONFIG_SCHEMES) else text
-    lines = [ln.strip() for ln in candidate.splitlines() if ln.strip()]
-    return [ln for ln in lines if ln.startswith(_CONFIG_SCHEMES)]
+    # تلاش ۱: متن قبلاً مستقیم بدون هیچ رمزگشایی
+    found = _configs_in_text(text)
+    if found:
+        return found
+
+    raw_lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+    # تلاش ۲: فقط وقتی چندین خط داریم، هر خط را جداگانه base64 دیکود کن تا قبل از اینکه دیکود-کل بدنه به اشتباه خطوط را درهم بکوبد (چون padding هر خط مستقل است)
+    if len(raw_lines) > 1:
+        per_line_found: list[str] = []
+        for ln in raw_lines:
+            if len(ln) < 8:
+                continue
+            dec_line = _try_base64_decode(ln)
+            if dec_line and dec_line.strip().startswith(_CONFIG_SCHEMES):
+                per_line_found.append(dec_line.strip())
+        if per_line_found:
+            return per_line_found
+
+    # تلاش ۳: کل بدنه را یک بلاک base64 واحد فرض کن (متداول‌ترین فرمت)
+    decoded = _try_base64_decode(text)
+    if decoded:
+        found = _configs_in_text(decoded)
+        if found:
+            return found
+
+    # تلاش ۴: خروجی JSON
+    found = _configs_from_json_envelope(decoded or text)
+    if found:
+        return found
+
+    return []
+
+
+async def fetch_raw_preview(sub_url: str, max_len: int = 400) -> str | None:
+    """فقط برای تشخیص: وقتی هیچ کانفیگی پیدا نمی‌شود، این تابع یک نمونه‌ی کوچک از بدنه‌ی خام پاسخ
+    را برمی‌گرداند تا به ادمین ارسال شود و فرمت واقعی پاسخ مشخص شود."""
+    try:
+        timeout = aiohttp.ClientTimeout(total=15, connect=8)
+        async with aiohttp.ClientSession(timeout=timeout, headers=_CLIENT_HEADERS) as session:
+            status, headers, body, final_url = await _get(session, sub_url.strip())
+            preview = (body or "")[:max_len]
+            return f"status={status} content-type={headers.get('Content-Type') or headers.get('content-type')} preview={preview!r}"
+    except Exception as e:
+        return f"خطا در fetch_raw_preview: {e}"
 
 
 def format_service_package(volume_gb, days, plan_key: str | None = None) -> tuple[str, str]:
