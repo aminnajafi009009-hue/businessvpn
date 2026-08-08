@@ -419,14 +419,17 @@ def config_detail_keyboard(cfg_id, sub_link_url: str | None = None, has_qr: bool
     buttons = [
         [InlineKeyboardButton(text="🔁 تمدید سرویس", callback_data=f"renew_{cfg_id}", style="success")],
     ]
+    # وقتی لینک ساب خود کاربر غیرفعال کرده، دکمههای بازکردن/دریافت کانفیگ از روی آن معنا ندارند
+    # (چون خود لینک فعلاً در پنل غیرفعال است و هیچ کانفیگی برنمی‌گرداند)
+    # تا کاربر به جای یک خطای گنگ متوجه شود وضعیت فعلی را ببیند و اول لینک را فعال کند.
     row = []
     if has_qr:
         row.append(InlineKeyboardButton(text="🖼 مشاهده کیوآرکد", callback_data=f"viewqr_{cfg_id}", style="primary"))
-    if sub_link_url:
+    if sub_link_url and not sub_link_disabled:
         row.append(InlineKeyboardButton(text="🔗 باز کردن لینک ساب", url=sub_link_url, style="primary"))
     if row:
         buttons.append(row)
-    if sub_link_url:
+    if sub_link_url and not sub_link_disabled:
         buttons.append([InlineKeyboardButton(text="🔗 دریافت کانفیگ‌های تکی", callback_data=f"mirrorconfigs_{cfg_id}", style="success")])
     if can_manage_link:
         buttons.append([InlineKeyboardButton(text="🔄 تغییر لینک ساب", callback_data=f"usersvclink_{cfg_id}", style="primary")])
