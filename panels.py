@@ -172,6 +172,24 @@ async def enable_service(panel: dict, service_id: str) -> tuple[bool, str]:
     return ok, msg
 
 
+async def regenerate_sub_link(panel: dict, service_id: str):
+    """(ok, link, remote_service_id, raw_data, message) — فقط لینک ساب/توکن سرویس را عوض می‌کند بدون اینکه حجم یا تاریخ انقضای
+    باقی‌مانده‌ی سرویس تغییر کند. برخلاف renew_service، اینجا هیچ پلان/حجم/روزی
+    گرفته نمی‌شود چون قرار نیست چیزی اضافه یا جایگزین شود؛ فقط دسترسی قبلی
+    (لینک قدیمی) قطع و یک لینک جدید صادر می‌شود."""
+    ptype = panel.get("panel_type")
+    if ptype == "shahrah":
+        return False, None, service_id, None, "برای این نوع پنل امکان تغییر خودکار لینک بدون تغییر بسته وجود ندارد؛ لطفا با پشتیبانی تماس بگیرید."
+    client = marzban_panel if ptype == "marzban" else pasargad_panel if ptype == "pasargad" else None
+    if client is None:
+        return False, None, service_id, None, "نوع پنل نامعتبر."
+    ok, data, msg = await client.revoke_sub(panel, service_id)
+    if not ok:
+        return False, None, service_id, data, msg
+    link, uname = client.extract_link_and_username(panel, data)
+    return True, link, uname or service_id, data, msg
+
+
 async def delete_service(panel: dict, service_id: str) -> tuple[bool, str]:
     """شاهراه API حذف مستقیم ندارد؛ برای این نوع فقط سرویس را گیر‌فعال می‌کنیم."""
     ptype = panel.get("panel_type")
