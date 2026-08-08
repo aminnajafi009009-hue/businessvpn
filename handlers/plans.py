@@ -1006,17 +1006,22 @@ async def my_configs_gaming(callback: types.CallbackQuery):
 
 
 @router.callback_query(F.data.startswith("viewconfig_"))
-async def view_config(callback: types.CallbackQuery):
+async def view_config(callback: types.CallbackQuery, cfg_id: int | None = None, toast: str | None = None):
+    """cfg_id اختیاری است: وقتی این تابع مستقیماً از روی دکمه‌ی چاپ-viewconfig_ صدا زده نمی‌شود
+    (مثلاً از داخل user_disable_sublink/user_enable_sublink برای رفرش صفحه بعد از تغییر وضعیت)،
+    چون در آن حالت callback.data همون پیشوند (usersvcdisable_/usersvcenable_) را دارد و تلاش پارس آن با پیشوند اشتباه
+    باعث می‌شد همیشه پیام «❤ سرویس یافت نشد» نشان داده شود و صفحه هرگز رفرش نشود."""
     user = db.get_user(callback.from_user.id)
     if user is None:
         await callback.answer("ابتدا دستور /start را بزنید.", show_alert=True)
         return
 
-    try:
-        cfg_id = int(callback.data.replace("viewconfig_", ""))
-    except ValueError:
-        await callback.answer("❌ سرویس یافت نشد.", show_alert=True)
-        return
+    if cfg_id is None:
+        try:
+            cfg_id = int(callback.data.replace("viewconfig_", ""))
+        except ValueError:
+            await callback.answer("❌ سرویس یافت نشد.", show_alert=True)
+            return
 
     cfg = db.get_config_by_id(cfg_id)
     if cfg is None or cfg["user_id"] != user["id"] or cfg.get("deleted"):
@@ -1050,7 +1055,7 @@ async def view_config(callback: types.CallbackQuery):
                 text, parse_mode="Markdown",
                 reply_markup=gaming_config_detail_keyboard(cfg_id, sub_link_url=sub_url),
             )
-            await callback.answer()
+            await callback.answer(toast) if toast else await callback.answer()
         except Exception:
             # همون محافظتی که پایین‌تر برای نسخه‌ی VIP اضافه شده، اینجا هم
             # اعمال شده تا اگر خطای غیرمنتظره‌ای رخ داد، کاربر روی پیام لیست
@@ -1077,7 +1082,7 @@ async def view_config(callback: types.CallbackQuery):
     sub_url = decrypted if decrypted.lower().startswith(("http://", "https://")) else None
 
     # نشون بده داریم اطلاعات مصرف رو زنده می‌خونیم (ممکنه چند ثانیه طول بکشه)
-    await callback.answer("⏳ در حال دریافت اطلاعات مصرف...")
+    await callback.answer(toast or "⏳ در حال دریافت اطلاعات مصرف...")
 
     # -----------------------------------------------------------------
     # نکته‌ی مهم: اگر هر خطای غیرمنتظره‌ای (نه فقط در دریافت اطلاعات مصرف،
@@ -1209,7 +1214,7 @@ async def user_change_sublink_confirm(callback: types.CallbackQuery):
         await callback.answer("❌ نمونه پنل پیدا نشد.", show_alert=True)
         return
     await callback.answer("⏳ در حال ساخت لینک جدید...")
-    ok, new_link, new_service_id, raw_data, msg = await panels.renew_service(panel, cfg["service_id"], remote_ref=None, volume_gb=None, days=None)
+    ok, new_link, new_service_id, raw_data, msg = await panels.regenerate_sub_link(panel, cfg["service_id"])
     if not ok or not new_link:
         await callback.message.answer(
             "⚠️ ساخت خودکار لینک جدید ممکن نشد. لطفاً برای تغییر لینک ساب با پشتیبانی تماس بگیرید.",
@@ -1246,8 +1251,12 @@ async def user_disable_sublink(callback: types.CallbackQuery):
         await callback.answer(f"❌ {msg}", show_alert=True)
         return
     db.set_config_link_disabled(cfg_id, True)
-    await callback.answer("✅ لینک ساب غیرفعال شد.", show_alert=True)
-    await view_config(callback)
+    # هر callback فقط یک‌بار قابل answer شدن است؛ قبلاً اینجا یک‌بار
+    # answer(show_alert=True) صدا زده می‌شد و بعد view_config دوباره callback.answer را صدا
+    # می‌زد که تلگرام برای callback قبلاً‌پاسخداده‌شده خطا می‌دهد (و در نتیجه
+    # صفحه/دکمه‌ها به‌روز نمی‌شد). حالا فقط یک‌بار (داخل خود view_config) answer می‌شود
+    # و پیام موفقیت هم همون جا نشون داده می‌شود، همراه با رفرش کامل صفحه با وضعیت جدید.
+    await view_config(callback, cfg_id=cfg_id, toast="✅ لینک ساب غیرفعال شد.")
 
 
 @router.callback_query(F.data.startswith("usersvcenable_"))
@@ -1270,8 +1279,7 @@ async def user_enable_sublink(callback: types.CallbackQuery):
         await callback.answer(f"❌ {msg}", show_alert=True)
         return
     db.set_config_link_disabled(cfg_id, False)
-    await callback.answer("✅ لینک ساب فعال شد.", show_alert=True)
-    await view_config(callback)
+    await view_config(callback, cfg_id=cfg_id, toast="✅ لینک ساب فعال شد.")
 
 
 # حداکثر واقعی تلگرام برای متن یک پیام ۴۰۹۶ کاراکتر است؛ برای امنیت بیشتر
