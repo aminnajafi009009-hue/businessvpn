@@ -781,6 +781,25 @@ async def panel_custom_start(callback: types.CallbackQuery, state: FSMContext):
     if order is None:
         await callback.answer("❌ سفارش یافت نشد.", show_alert=True)
         return
+    if order.get("order_type") == "renew" and order.get("target_config_id"):
+        # سفارش تمدید («بساز سرویس خودت» با کارت‌به‌کارت): برخلاف سفارش‌های جدید،
+        # اینجا نباید کیبورد انتخاب پنل/تمپلیت نشون داده بشه و یک سرویس تازه
+        # ساخته بشه؛ چون سرویس مقصد (و پنل/سرویس‌آیدی‌اش) از قبل روی همون کانفیگ
+        # قبلی (target_config_id) مشخصه. قبلاً این مسیر همیشه کیبورد انتخاب پنل
+        # رو نشون می‌داد و به panel_custom_pick می‌رسید که بدون توجه به
+        # order_type همیشه panels.create_service (ساخت سرویس تازه) رو صدا
+        # می‌زد؛ همین باعث می‌شد تمدیدهایی که ادمین با دکمه‌ی «ساخت خودکار از
+        # یک پنل» (بعد از تایید رسید کارت‌به‌کارت) ارسال می‌کرد، به‌جای تمدید
+        # سرویس قبلی، یک سرویس کاملاً جدید و جدا بسازند.
+        await callback.answer("⏳ در حال تمدید همان سرویس قبلی از داخل پنل...")
+        ok, msg = await _fulfill_custom_renew(callback.bot, order, order_id, order["volume_gb"], order["days"])
+        await callback.message.answer(msg)
+        if not ok:
+            await callback.message.answer(
+                "برای تمدید این سفارش می‌تونی به‌جاش از دکمه‌ی «📤 شروع ارسال کانفیگ — دستی» "
+                "روی پیام اصلی سفارش استفاده کنی."
+            )
+        return
     enabled_panels = db.list_vpn_panels(enabled_only=True)
     if not enabled_panels:
         await callback.answer("❌ هیچ پنل فعالی وجود ندارد.", show_alert=True)
@@ -806,6 +825,14 @@ async def panel_custom_pick_panel(callback: types.CallbackQuery, state: FSMConte
         return
     _, order_id_str, panel_id_str = callback.data.split("|")
     order_id, panel_id = int(order_id_str), int(panel_id_str)
+    order = db.get_custom_order(order_id)
+    if order and order.get("order_type") == "renew" and order.get("target_config_id"):
+        # محافظتی: اگر این کیبورد قبل از رفع باگ بالا برای ادمین ارسال شده و
+        # هنوز روی صفحه‌اش باز مونده، دوباره مسیر ساخت سرویس تازه رو طی نکنه.
+        await callback.answer("⏳ در حال تمدید همان سرویس قبلی از داخل پنل...")
+        ok, msg = await _fulfill_custom_renew(callback.bot, order, order_id, order["volume_gb"], order["days"])
+        await callback.message.answer(msg)
+        return
     panel = db.get_vpn_panel(panel_id)
     if not panel:
         await callback.answer("❌ این نمونه پنل پیدا نشد.", show_alert=True)
@@ -840,6 +867,13 @@ async def panel_custom_pick(callback: types.CallbackQuery, state: FSMContext):
     panel = db.get_vpn_panel(panel_id)
     if not chosen or not order or not panel:
         await callback.answer("❌ این انتخاب منقضی شده؛ دوباره تلاش کن.", show_alert=True)
+        return
+    if order.get("order_type") == "renew" and order.get("target_config_id"):
+        # محافظتی: اگر این کیبورد قبل از رفع باگ بالا برای ادمین ارسال شده و
+        # هنوز روی صفحه‌اش باز مونده، دوباره مسیر ساخت سرویس تازه رو طی نکنه.
+        await callback.answer("⏳ در حال تمدید همان سرویس قبلی از داخل پنل...")
+        ok, msg = await _fulfill_custom_renew(callback.bot, order, order_id, order["volume_gb"], order["days"])
+        await callback.message.answer(msg)
         return
     user = db.get_user_by_id(order["user_id"])
     if not user:
